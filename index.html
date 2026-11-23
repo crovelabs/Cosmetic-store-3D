@@ -1,0 +1,470 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Glow Virtual Store</title>
+<style>
+:root{--bg:#fff5f2;--fg:#4a2c2a;--card:#fff;--ac:#d98b7c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#2a1a1a;--fg:#fbe9e5;--card:#3a2524}}
+:root[data-theme="dark"]{--bg:#2a1a1a;--fg:#fbe9e5;--card:#3a2524}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#hud{position:fixed;left:0;right:0;bottom:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 8px}
+button{background:var(--card);color:var(--fg);border:1px solid var(--ac);border-radius:20px;padding:8px 14px;font-size:14px;cursor:pointer}
+#tip{position:fixed;top:calc(58px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--card);color:var(--fg);padding:8px 14px;border-radius:14px;font-size:14px;max-width:90%;text-align:center}
+#modal{display:none;position:fixed;inset:0;z-index:8;background:rgba(0,0,0,.55);align-items:center;justify-content:center}
+#box{background:var(--card);color:var(--fg);border-radius:16px;padding:16px;width:min(92vw,460px);max-height:90vh;overflow:auto;text-align:center}
+video,#snap{width:100%;border-radius:12px;background:#000;transform:scaleX(-1)}
+#snap{display:none}
+input{width:90%;padding:8px;border-radius:10px;border:1px solid var(--ac);background:var(--bg);color:var(--fg);font-size:14px}
+#top{position:fixed;top:0;left:0;right:0;height:calc(48px + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 10px 0;display:flex;align-items:center;gap:10px;background:rgba(28,16,20,.85);backdrop-filter:blur(8px);z-index:6;border-bottom:1px solid rgba(212,175,55,.5);box-sizing:border-box}
+#top button{background:transparent;color:#fbe9e5;border:1px solid rgba(212,175,55,.6);border-radius:16px;padding:6px 12px;font-size:13px}
+#top #mb{font-size:20px;line-height:1;padding:4px 11px;border-radius:10px}
+#brand{font:bold 18px Georgia,serif;color:#f6d98a;letter-spacing:.5px}
+#nv{margin-left:auto;display:flex;gap:6px}
+@media (max-width:700px){#nv{display:none}}
+#drawer{display:none;position:fixed;inset:0;z-index:7}
+#dback{position:absolute;inset:0;background:rgba(0,0,0,.5)}
+#dpanel{position:absolute;left:0;top:0;bottom:0;width:min(78vw,300px);background:#2a1519;color:#fbe9e5;padding:calc(env(safe-area-inset-top,0px) + 16px) 16px 16px;overflow:auto;border-right:1px solid #d4af37;box-sizing:border-box}
+#dpanel h3{margin:0 0 12px;color:#f6d98a;font-family:Georgia,serif}
+#dpanel button{display:block;width:100%;text-align:left;margin:6px 0;background:#3a2025;color:#fbe9e5;border:1px solid rgba(212,175,55,.4);border-radius:12px;padding:10px 12px;font-size:15px}
+#welcome{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#fff;pointer-events:none;z-index:5;background:radial-gradient(rgba(0,0,0,.55),rgba(0,0,0,0) 75%);transition:opacity 1.5s;padding:0 16px}
+#welcome h1{font-size:clamp(30px,7vw,76px);margin:0 0 12px;text-shadow:0 4px 24px #000;font-family:Georgia,serif}
+#welcome p{font-size:clamp(16px,2.6vw,30px);margin:0;text-shadow:0 2px 12px #000}
+#dp{position:fixed;left:10px;bottom:70px;display:grid;grid-template-columns:repeat(3,40px);gap:4px}
+#dp button{padding:0;height:40px;border-radius:10px}
+</style></head><body>
+<header id="top"><button id="mb" aria-label="Menu">☰</button><div id="brand">Glow Store</div><nav id="nv"><button id="n1">Info Toko</button><button id="n2">Leaderboard</button><button id="n3">My Profile</button><button id="n4">Login</button></nav></header>
+<div id="drawer"><div id="dback"></div><aside id="dpanel"></aside></div>
+<div id="tip">Selamat datang! Ambil keranjang di meja dekat pintu · WASD untuk jalan · geser mouse untuk menoleh · bayar di kasir kiri depan · klik botol putih KOSONG untuk membuat produk brand-mu (Rp1.000)</div>
+<div id="welcome"><h1>Selamat Datang di Glow Store</h1><p>Klaim produk kamu sendiri · tulis nama brand kamu atau nama yang kamu inginkan· hanya Rp1.000</p></div>
+<div id="dp"><span></span><button data-k="w">▲</button><span></span><button data-k="a">◀</button><button data-k="s">▼</button><button data-k="d">▶</button></div>
+<div id="hud"><button id="bm">Mirror Photo</button><button id="bs">AI Face Analysis</button><button id="bc">Keranjang (0)</button><button id="bh">Slot Brand (0/0)</button><button id="bl">Leaderboard</button></div>
+<div id="modal"><div id="box"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const tip=document.getElementById('tip'),say=t=>{tip.textContent=t};
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x1d1517);scene.fog=new THREE.Fog(0x1d1517,10,36);
+const cam=new THREE.PerspectiveCamera(70,1,.1,200);cam.position.set(0,1.6,18);let intro=5;
+scene.add(new THREE.HemisphereLight(0xffe8e0,0x30222a,.5));
+[[0,7],[0,2],[0,-3],[0,-8],[0,-12],[-6,4],[6,4],[-6,-5],[6,-5]].forEach(a=>{const l=new THREE.PointLight(0xffd9b8,a[0]?.6:.9,a[0]?9:12);l.position.set(a[0],3.4,a[1]);scene.add(l)});
+const M=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.6},o));
+const mc={},mat=c=>mc[c]||(mc[c]=M(c));
+const C=(r,h,r2)=>new THREE.CylinderGeometry(r,r2===undefined?r:r2,h,12),B=(w,h,d)=>new THREE.BoxGeometry(w,h,d),SP=r=>new THREE.SphereGeometry(r,12,10);
+const add=(g,m,x,y,z,p)=>{const o=new THREE.Mesh(g,m);o.position.set(x,y,z);(p||scene).add(o);return o};
+const gold=M(0xd4af37,{metalness:.8,roughness:.3}),led=new THREE.MeshBasicMaterial({color:0xfff1c9}),glow=new THREE.MeshBasicMaterial({color:0xfff1d6});
+// ruangan (16 x 24 m)
+add(new THREE.PlaneGeometry(16,24),M(0x40323a,{roughness:.18,metalness:.2}),0,0,-2).rotation.x=-Math.PI/2;
+add(new THREE.PlaneGeometry(16,24),M(0x4a3a3e),0,4,-2).rotation.x=Math.PI/2;
+add(new THREE.PlaneGeometry(16,4),M(0x6e3a45),0,2,-14);
+add(new THREE.PlaneGeometry(24,4),M(0x7a3f4b),-8,2,-2).rotation.y=Math.PI/2;
+add(new THREE.PlaneGeometry(24,4),M(0x35566b),8,2,-2).rotation.y=-Math.PI/2;
+add(new THREE.PlaneGeometry(2.6,22),M(0x8a3d4f,{roughness:.9}),0,.01,-2).rotation.x=-Math.PI/2;
+[-7.9,7.9].forEach(x=>{add(B(.12,.08,24),led,x,3.9,-2);add(B(.06,.15,24),gold,x*1.006,.08,-2)});
+[6,-1,-8].forEach(z=>add(new THREE.TorusGeometry(1.4,.04,8,40),glow,0,3.92,z).rotation.x=Math.PI/2);
+// fasad & pintu
+const fm=M(0x6e3a45,{side:2});
+add(new THREE.PlaneGeometry(6.8,4),fm,-4.6,2,10);add(new THREE.PlaneGeometry(6.8,4),fm,4.6,2,10);add(new THREE.PlaneGeometry(2.4,1.4),fm,0,3.3,10);
+add(B(.1,2.6,.14),gold,-1.2,1.3,10);add(B(.1,2.6,.14),gold,1.2,1.3,10);add(B(2.5,.1,.14),gold,0,2.6,10);
+[[-1.2,1.2],[1.2,-1.2]].forEach(a=>{const dg=new THREE.Group();dg.position.set(a[0],0,10);dg.rotation.y=a[1];scene.add(dg);const s=a[0]<0?1:-1;
+ add(B(1.1,2.5,.03),new THREE.MeshStandardMaterial({color:0xcfe9f3,transparent:true,opacity:.25,roughness:.05}),s*.55,1.25,0,dg);add(C(.015,.4),gold,s*.98,1.2,.04,dg)});
+add(new THREE.PlaneGeometry(24,12),M(0x211719),0,-.01,16).rotation.x=-Math.PI/2;
+[-1.9,1.9].forEach(x=>{add(C(.2,.35,.15),M(0xb5651d),x,.175,9.2);[[0,.75,0,.32],[.12,.55,.05,.22],[-.1,.6,-.06,.2]].forEach(l=>add(SP(l[3]),M(0x3f7a4a),x+l[0],l[1],9.2+l[2]))});
+// papan
+function sign(t,g,y){const c=document.createElement('canvas');c.width=512;c.height=96;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,512,96);x.fillStyle='#8a4b43';let f=46;x.font='bold 46px system-ui';while(x.measureText(t).width>480&&f>18){f-=2;x.font='bold '+f+'px system-ui'}x.textAlign='center';x.textBaseline='middle';x.fillText(t,256,50);add(new THREE.PlaneGeometry(2,.375),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c)}),0,y||2.75,.05,g)}
+function zs(t,x,y,z,ry,w,rods){const c=document.createElement('canvas');c.width=1024;c.height=160;const q=c.getContext('2d');q.fillStyle='#2a1519';q.fillRect(0,0,1024,160);q.strokeStyle='#d4af37';q.lineWidth=6;q.strokeRect(8,8,1008,144);q.fillStyle='#f6d98a';q.font='bold 70px Georgia,serif';q.textAlign='center';q.textBaseline='middle';q.fillText(t,512,86);
+ const tx=new THREE.CanvasTexture(c);[0,Math.PI].forEach(a=>{const m=add(new THREE.PlaneGeometry(w,w*.156),new THREE.MeshBasicMaterial({map:tx}),x,y,z);m.rotation.y=ry+a;m.translateZ(.03)});
+ if(rods)[-w*.4,w*.4].forEach(d=>add(C(.01,.6),gold,x,y+.4,z+d))}
+zs('GLOW BEAUTY STORE',0,3.3,10.05,0,4.4);
+zs('SKINCARE',-7.95,3.4,-2,Math.PI/2,5);zs('MAKEUP & BEAUTY TOOLS',7.95,3.4,-2,-Math.PI/2,7);
+zs('BODY CARE & FRAGRANCE',-4.6,3.3,2.5,Math.PI/2,4.6,1);zs('HAIRCARE',4.6,3.3,2.5,Math.PI/2,3.2,1);
+// katalog
+const brands=['Lumière','Rosé Lab','Aqua Pura','Velvet','Dewy','Nora','Kaia','Bloom'];
+const cats=[
+{n:'Lipstik',pr:89,pal:[0xc2185b,0xd84343,0xe58e8e,0xb5651d,0x8e2a3a],p:[[C(.028,.07),.035,0xd4af37],[C(.022,.05),.095,'p']]},
+{n:'Foundation',pr:129,pal:[0xf3d2b3,0xe6b894,0xd09b6f,0xb57a50],p:[[C(.04,.12),.06,'p'],[C(.012,.04),.14,0x333333]]},
+{n:'Parfum',pr:249,pal:[0xc9a0dc,0xf4c2c2,0x9ecbe8,0xffe0a3],p:[[B(.08,.11,.05),.055,'p'],[C(.02,.04),.13,0xd4af37]]},
+{n:'Serum & Ampoule',pr:159,pal:[0xb8860b,0x7fb77e,0xe8c07a],p:[[C(.03,.09),.045,'p'],[C(.012,.03),.105,0x222222],[SP(.02),.14,0xf5f5f5]]},
+{n:'Alat Skincare',pr:119,pal:[0xf4a6b8,0xcfd8dc,0xb2dfdb],p:[[C(.012,.14),.07,'p'],[SP(.035),.16,0xffd6e0]]},
+{n:'Pembersih & Face Wash',pr:69,pal:[0x81d4fa,0xa5d6a7,0xfff59d,0xffffff],p:[[C(.032,.15),.075,0xffffff],[C(.034,.03),.01,'p']]},
+{n:'Body Wash',pr:79,pal:[0xf48fb1,0xce93d8,0x80cbc4,0xffcc80],p:[[C(.05,.2),.1,'p'],[C(.015,.04),.22,0xffffff]]},
+{n:'Sunscreen',pr:99,pal:[0xffd54f,0xffb74d,0x4fc3f7],p:[[B(.06,.15,.02),.075,'p']]},
+{n:'Masker Wajah',pr:19,pal:[0xf8bbd0,0xc5e1a5,0xb3e5fc],p:[[B(.09,.11,.01),.055,'p']]},
+{n:'Bedak & Blush',pr:109,pal:[0xf8a5b5,0xe8c4a0,0xd9a0a0],p:[[C(.05,.03),.015,'p'],[C(.052,.01),.035,0x222222]]},
+{n:'Kuas & Sponge',pr:59,pal:[0xf4a6b8,0xd9a0a0,0xb2dfdb,0xe6b894,0xc9a0dc],p:[[C(.01,.13),.065,'p'],[C(.014,.03),.14,0xd4af37],[C(.024,.06),.185,0x222222]]},
+{n:'Toner & Essence',pr:89,pal:[0xb3e5fc,0xc8e6c9,0xf8bbd0],p:[[C(.04,.12),.06,'p'],[C(.02,.03),.135,0xffffff]]},
+{n:'Pelembap',pr:109,pal:[0xf8bbd0,0xb2dfdb,0xfff9c4],p:[[C(.05,.05),.025,'p'],[C(.052,.02),.06,0xd4af37]]},
+{n:'Eyeshadow & Maskara',pr:99,pal:[0xb5651d,0x8e6bb5,0xd98b7c,0x4a6b8a],p:[[B(.09,.02,.07),.01,0x222222],[B(.07,.01,.05),.025,'p']]},
+{n:'Shampo & Kondisioner',pr:79,pal:[0x80cbc4,0xce93d8,0xffcc80,0x90caf9],p:[[C(.045,.2),.1,'p'],[C(.02,.04),.22,0xffffff]]},
+{n:'Hair Mask & Serum',pr:119,pal:[0xf48fb1,0xa5d6a7,0xffe082],p:[[C(.06,.08),.04,'p'],[C(.062,.02),.09,0x222222]]},
+{n:'Hair Styling',pr:89,pal:[0x90a4ae,0xf48fb1,0x81d4fa],p:[[C(.035,.2),.1,'p'],[C(.025,.04),.22,0x222222]]},
+{n:'Body Lotion',pr:89,pal:[0xffcc80,0xf8bbd0,0xc5e1a5],p:[[C(.05,.16),.08,'p'],[C(.012,.05),.185,0xffffff]]},
+{n:'Aksesoris Rambut',pr:39,pal:[0xf4a6b8,0xcfd8dc,0xb39ddb],p:[[B(.1,.03,.1),.015,'p'],[SP(.03),.05,0xffd6e0]]},
+{n:'Travel Size',pr:29,pal:[0xf48fb1,0x81d4fa,0xffd54f,0xa5d6a7],p:[[C(.025,.08),.04,'p'],[C(.014,.02),.09,0xd4af37]]},
+{n:'Micellar & Cleansing Oil',pr:79,pal:[0xe1f5fe,0xfff3e0,0xe8f5e9],p:[[C(.04,.16),.08,'p'],[C(.012,.04),.18,0xffffff]]},
+{n:'Exfoliator & Scrub',pr:69,pal:[0xd7b98e,0xf8bbd0,0xc5e1a5],p:[[C(.06,.07),.035,'p'],[C(.062,.02),.08,0x8a5a2b]]},
+{n:'Acne Care',pr:59,pal:[0xa5d6a7,0x80cbc4,0xffffff],p:[[C(.025,.14),.07,'p'],[C(.027,.025),.152,0xffffff]]},
+{n:'Eye Cream',pr:139,pal:[0xf8bbd0,0xb3e5fc,0xffe082],p:[[C(.03,.04),.02,'p'],[C(.032,.015),.047,0xd4af37]]},
+{n:'Lip Balm',pr:35,pal:[0xf48fb1,0xffcc80,0x81d4fa,0xc5e1a5],p:[[C(.014,.07),.035,'p'],[C(.016,.03),.085,0x222222]]},
+{n:'Anti-Aging Cream',pr:219,pal:[0x7b1fa2,0xd4af37,0x1a237e],p:[[C(.055,.06),.03,'p'],[C(.057,.025),.0725,0xd4af37]]},
+{n:'Concealer & Primer',pr:99,pal:[0xf3d2b3,0xe6b894,0xd09b6f,0xb57a50],p:[[C(.014,.12),.06,'p'],[C(.016,.04),.14,0x222222]]},
+{n:'Eyebrow & Eyeliner',pr:49,pal:[0x5d4037,0x212121,0x8d6e63],p:[[C(.008,.15),.075,'p'],[C(.008,.02),.16,0x222222]]},
+{n:'Lip Tint & Gloss',pr:69,pal:[0xff6f91,0xe53935,0xff8a65,0xad1457],p:[[C(.015,.09),.045,'p'],[C(.017,.04),.11,0xd4af37]]},
+{n:'Setting Spray',pr:119,pal:[0xb3e5fc,0xf8bbd0,0xe1bee7],p:[[C(.035,.17),.085,'p'],[C(.015,.03),.185,0xffffff]]},
+{n:'Bulu Mata Palsu',pr:45,pal:[0x222222,0xf8bbd0,0xffffff],p:[[B(.1,.025,.05),.0125,'p'],[B(.08,.01,.02),.03,0x222222]]},
+{n:'Kutek',pr:39,pal:[0xd32f2f,0xe91e63,0x9c27b0,0xffab91,0x3f51b5],p:[[C(.025,.06),.03,'p'],[C(.015,.05),.085,0x222222]]},
+{n:'Hand Cream & Body Butter',pr:59,pal:[0xffe0b2,0xf8bbd0,0xc5e1a5],p:[[B(.05,.12,.025),.06,'p'],[C(.02,.025),.13,0xffffff]]},
+{n:'Penjepit & Pinset',pr:49,pal:[0xf4a6b8,0xcfd8dc,0xd4af37],p:[[C(.008,.12),.06,0xcfd8dc],[B(.06,.01,.02),.125,'p']]},
+{n:'Body Mist & Deodoran',pr:69,pal:[0xf8bbd0,0xb3e5fc,0xe1bee7,0xffe0b2],p:[[C(.03,.17),.085,'p'],[C(.022,.03),.185,0xffffff]]}];
+const RC=[0x7b2d3f,0x7b2d3f,0x8a5a2b,0x2f5d62,0x2d4a7a,0x2f5d62,0x8a5a2b,0x2f5d62,0x2f5d62,0x7b2d3f,0x2d4a7a,0x2f5d62,0x2f5d62,0x7b2d3f,0x4a3b6b,0x4a3b6b,0x4a3b6b,0x8a5a2b,0x4a3b6b,0x6b6b2a,0x2f5d62,0x2f5d62,0x2f5d62,0x2f5d62,0x2f5d62,0x2f5d62,0x7b2d3f,0x7b2d3f,0x7b2d3f,0x7b2d3f,0x7b2d3f,0x7b2d3f,0x8a5a2b,0x2d4a7a,0x8a5a2b];
+const cart=[];let basket=false;
+const slots={},wm=M(0xf8f8f8);
+const ltex=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const q=c.getContext('2d');q.fillStyle='#fff';q.fillRect(0,0,128,128);q.strokeStyle='#d98b7c';q.lineWidth=6;q.setLineDash([10,8]);q.strokeRect(6,6,116,116);q.fillStyle='#d98b7c';q.font='bold 24px system-ui';q.textAlign='center';q.fillText('KOSONG',64,58);q.font='bold 18px system-ui';q.fillText('Rp1.000',64,86);return new THREE.CanvasTexture(c)})();
+const lmat=new THREE.MeshBasicMaterial({map:ltex}),lgeo=new THREE.PlaneGeometry(.07,.07),bgeo=C(.04,.14),cgeo=C(.02,.03);
+function mkSlot(g,x,y,id){const pg=new THREE.Group();pg.position.set(x,y,0);g.add(pg);const d={t:'slot',id:id,root:pg};
+ const body=new THREE.Mesh(bgeo,wm),cap=new THREE.Mesh(cgeo,gold),lb=new THREE.Mesh(lgeo,lmat);body.position.y=.07;cap.position.y=.155;lb.position.set(0,.075,.041);
+ [body,lb].forEach(m=>{m.userData=d;pg.add(m)});d.body=body;d.lb=lb;slots[id]=d}
+function unit(x,z,ry,len,k){
+ const ct=cats[k],g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=ry;scene.add(g);
+ add(B(len,2.5,.05),M(RC[k]),0,1.25,-.27,g);add(B(len,.28,.52),M(0x2a1f22),0,.14,-.01,g);
+ [-1,1].forEach(s=>add(B(.05,2.5,.55),gold,s*len/2,1.25,-.02,g));add(B(len+.05,.05,.55),gold,0,2.52,-.02,g);
+ for(let r=0;r<4;r++){const y=.3+r*.55;
+  add(B(len,.04,.5),M(0xf5e6c8),0,y,0,g);add(B(len-.1,.015,.03),led,0,y+.5,.2,g);
+  for(let i=0;i<Math.floor(len/.26);i++){
+   mkSlot(g,-len/2+.2+i*.26,y+.02,k*100+r*20+i);continue;
+   const col=ct.pal[(i*3+r)%ct.pal.length],pg=new THREE.Group();pg.position.set(-len/2+.2+i*.26,y+.02,0);g.add(pg);
+   const d={t:'item',n:brands[(i+r+k)%brands.length]+' '+ct.n,pr:ct.pr+((i+r)%4)*10,root:pg};
+   ct.p.forEach(([ge,py,c])=>{const m=new THREE.Mesh(ge,mat(c==='p'?col:c));m.position.y=py;m.userData=d;pg.add(m)})}}
+ sign(ct.n,g)}
+const P=Math.PI;
+// dinding kiri: skincare | dinding kanan: makeup & tools
+[6.5,3.2,-.1,-3.4,-6.7,-10].forEach((z,i)=>{unit(-7.7,z,P/2,3,[5,11,3,12,7,8][i]);unit(7.7,z,-P/2,3,[1,9,13,0,10,4][i])});
+// island kiri: body care | island kanan: haircare
+unit(-4.3,4.2,P/2,3,6);unit(-4.3,.9,P/2,3,17);unit(-4.9,4.2,-P/2,3,19);unit(-4.9,.9,-P/2,3,2);
+unit(4.3,4.2,-P/2,3,14);unit(4.3,.9,-P/2,3,15);unit(4.9,4.2,P/2,3,16);unit(4.9,.9,P/2,3,18);
+[[-4.2,20,23,26,29],[-7.5,21,24,27,30],[-10.8,22,25,28,31]].forEach(a=>{unit(-4.3,a[0],P/2,3,a[1]);unit(-4.9,a[0],-P/2,3,a[2]);unit(4.3,a[0],-P/2,3,a[3]);unit(4.9,a[0],P/2,3,a[4])});
+unit(-6.2,-13.7,0,2.4,32);unit(6.2,-13.7,0,2.4,33);unit(4.5,9.7,P,4,34);
+zs('SKINCARE TREATMENT',-4.6,3.3,-7.5,P/2,4.8,1);zs('MAKEUP & NAIL',4.6,3.3,-7.5,P/2,3.4,1);
+const hc=document.createElement('canvas');hc.width=1024;hc.height=300;const hx=hc.getContext('2d'),htex=new THREE.CanvasTexture(hc);
+function drawHof(){hx.fillStyle='#2a1519';hx.fillRect(0,0,1024,300);hx.strokeStyle='#d4af37';hx.lineWidth=6;hx.strokeRect(8,8,1008,284);hx.textAlign='center';hx.fillStyle='#f6d98a';hx.font='bold 64px Georgia,serif';hx.fillText('BEST SELLER',512,85);
+ const all=Object.values(slots).filter(s=>s.premium),nm=all.filter(s=>s.v&&s.paid).map(s=>s.v.brand);
+ hx.font='34px system-ui';hx.fillText(nm.length?nm.slice(-3).join('  ·  '):'Etalase utama · Rp5.000 per slot',512,170);hx.fillStyle='#fff';hx.font='26px system-ui';hx.fillText(nm.length+' / '+all.length+' slot terisi',512,240);htex.needsUpdate=true}
+const tw=new THREE.Group();tw.position.set(0,0,-4.5);scene.add(tw);
+const ptex=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const q=c.getContext('2d');q.fillStyle='#2a1519';q.fillRect(0,0,128,128);q.strokeStyle='#d4af37';q.lineWidth=6;q.strokeRect(5,5,118,118);q.fillStyle='#f6d98a';q.textAlign='center';q.font='bold 17px system-ui';q.fillText('BEST SELLER',64,40);q.font='bold 24px system-ui';q.fillText('KOSONG',64,74);q.font='bold 20px system-ui';q.fillText('Rp5.000',64,104);return new THREE.CanvasTexture(c)})();
+const pmat=new THREE.MeshBasicMaterial({map:ptex});let pi=0;
+function mkPrem(x,y,z,ry,id){const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=ry;tw.add(g);const d={t:'slot',id:id,root:g,premium:true,price:5000};
+ const body=new THREE.Mesh(B(.2,.15,.2),wm),lb=new THREE.Mesh(new THREE.PlaneGeometry(.13,.13),pmat);body.position.y=.075;lb.position.set(0,.08,.106);
+ [body,lb].forEach(m=>{m.userData=d;g.add(m)});[B(.04,.155,.205),B(.205,.155,.04)].forEach(ge=>{const m=new THREE.Mesh(ge,gold);m.position.y=.075;m.userData=d;g.add(m)});d.body=body;d.lb=lb;slots[id]=d}
+const gcol=[0xf48fb1,0x81d4fa,0xffd54f,0xa5d6a7,0xce93d8,0xffab91];let gi=0;
+function gift(x,y,z){const g=new THREE.Group();g.position.set(x,y,z);scene.add(g);const d={t:'gift',n:brands[gi%8]+' Gift Set',pr:199,root:g};[[B(.2,.15,.2),mat(gcol[gi++%6])],[B(.04,.155,.205),gold],[B(.205,.155,.04),gold]].forEach(p=>{const m=new THREE.Mesh(p[0],p[1]);m.position.y=.075;m.userData=d;g.add(m)})}
+[[.9,.45,0,9,.78],[.65,.4,.45,7,.5],[.4,.35,.85,3,.2]].forEach(a=>{add(C(a[0],a[1]),M(0x5a3a2a),0,a[2]+a[1]/2,-4.5);add(C(a[0]+.01,.03),gold,0,a[2]+a[1]-.015,-4.5);for(let i=0;i<a[3];i++){const t=i/a[3]*P*2;mkPrem(Math.cos(t)*a[4],a[2]+a[1],Math.sin(t)*a[4],P/2-t,90000+pi++)}});
+[0,P].forEach(a=>{const m=add(new THREE.PlaneGeometry(2.8,.82),new THREE.MeshBasicMaterial({map:htex}),0,3.1,-4.5);m.rotation.y=a;m.translateZ(.03)});add(C(.01,.8),gold,-1.2,3.5,-4.5);add(C(.01,.8),gold,1.2,3.5,-4.5);
+add(new THREE.CylinderGeometry(.5,1.3,3.7,24,1,true),new THREE.MeshBasicMaterial({color:0xfff1d6,transparent:true,opacity:.07,side:2,depthWrite:false}),0,2.1,-4.5);
+add(new THREE.TorusGeometry(1.0,.03,8,48),glow,0,.02,-4.5).rotation.x=P/2;
+// jalan, lingkungan luar, bangku & komputer kasir
+const sky=(()=>{const c=document.createElement('canvas');c.width=16;c.height=256;const q=c.getContext('2d'),gr=q.createLinearGradient(0,0,0,256);gr.addColorStop(0,'#0b0a24');gr.addColorStop(.3,'#3b2358');gr.addColorStop(.45,'#c2607a');gr.addColorStop(.5,'#f0a57a');gr.addColorStop(1,'#f0a57a');q.fillStyle=gr;q.fillRect(0,0,16,256);return new THREE.CanvasTexture(c)})();
+add(new THREE.SphereGeometry(120,24,16),new THREE.MeshBasicMaterial({map:sky,side:THREE.BackSide,fog:false}),0,0,0);
+{const p=[];for(let i=0;i<300;i++){const a=Math.random()*6.28,e=Math.random()*1.2+.15;p.push(Math.cos(a)*Math.cos(e)*100,Math.sin(e)*100,Math.sin(a)*Math.cos(e)*100)}const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.Float32BufferAttribute(p,3));scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:.6,fog:false})))}
+add(new THREE.PlaneGeometry(300,300),M(0x1a1416),0,-.02,0).rotation.x=-P/2;
+const rd=M(0x2b2b30,{roughness:.85}),sw=M(0x6d6068,{roughness:.8}),curb=M(0x9a8d95);
+[[60,6,13,sw],[60,10,21,rd],[60,6,29,sw]].forEach(a=>add(new THREE.PlaneGeometry(a[0],a[1]),a[3],0,a[3]===rd?-.004:0,a[2]).rotation.x=-P/2);
+[16.05,25.95].forEach(z=>add(B(60,.14,.12),curb,0,.07,z));
+for(let x=-28;x<=28;x+=4)add(B(2,.012,.14),M(0xf0c040),x,.01,21);
+for(let i=0;i<7;i++)add(B(.45,.012,9.6),M(0xeeeeee),9+i*.8,.01,21);
+function facade(c1,c2,cols,rows,lit){const c=document.createElement('canvas');c.width=256;c.height=256;const q=c.getContext('2d');q.fillStyle=c1;q.fillRect(0,0,256,256);const w=256/cols,h=256/rows;for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){q.fillStyle=Math.random()<lit?c2:'#1b1620';q.fillRect(i*w+w*.2,j*h+h*.2,w*.6,h*.55)}return new THREE.CanvasTexture(c)}
+[[-24,9,'#3a2f4a'],[-12,7,'#4a3a3a'],[0,10,'#2f3f55'],[12,8,'#4a3f55'],[24,9,'#3a4a4a']].forEach(b=>{const h=b[1];add(B(11.5,h,8),M(0x2a2230),b[0],h/2,36);add(new THREE.PlaneGeometry(11.5,h),new THREE.MeshBasicMaterial({map:facade(b[2],'#ffd9a0',5,Math.round(h/1.6),.45)}),b[0],h/2,31.96).rotation.y=P});
+[-13,13,-23,23].forEach((x,i)=>{add(B(10,5,12),M(i<2?0x3a2a3f:0x2f3d4a),x,2.5,4);add(new THREE.PlaneGeometry(10,5),new THREE.MeshBasicMaterial({map:facade(i<2?'#4a3550':'#35475a','#ffe0b0',4,2,.8)}),x,2.5,10.02)});
+[-4.4,4.4].forEach(x=>{add(B(3.8,2.2,.04),gold,x,1.5,10.03);add(new THREE.PlaneGeometry(3.6,2),new THREE.MeshBasicMaterial({color:0xffd9b8,transparent:true,opacity:.3}),x,1.5,10.06)});
+[[-10.5,15.2],[10.5,15.2],[-17,15.2],[17,15.2]].forEach(a=>{add(C(.09,1.8),M(0x4a3426),a[0],.9,a[1]);add(SP(.9),M(0x2f6b45),a[0],2.3,a[1]).scale.set(1,1.2,1);add(SP(.6),M(0x3a7d50),a[0]+.4,2.9,a[1]+.1)});
+[-6,6,-14,14].forEach(x=>{add(C(.04,3.8),M(0x222222),x,1.9,15.5);add(B(.6,.05,.05),M(0x222222),x+.25,3.8,15.5);add(SP(.13),led,x+.5,3.72,15.5)});
+[-6,6].forEach(x=>{const l=new THREE.PointLight(0xffd9b0,.8,12);l.position.set(x+.5,3.6,15.5);scene.add(l)});
+{const g=new THREE.Group();g.position.set(-9,0,17.8);g.rotation.y=P/2;scene.add(g);const cb=M(0x9b2335,{metalness:.5,roughness:.3});add(B(1.9,.55,4.2),cb,0,.6,0,g);add(B(1.7,.5,2.1),cb,0,1.12,-.2,g);add(B(1.72,.4,1.9),M(0x1a2630,{metalness:.8,roughness:.1}),0,1.14,-.2,g);[[-.95,1.3],[.95,1.3],[-.95,-1.3],[.95,-1.3]].forEach(w=>{add(C(.34,.26),M(0x111111),w[0],.34,w[1],g).rotation.z=P/2});[-.6,.6].forEach(x=>{add(B(.35,.14,.05),new THREE.MeshBasicMaterial({color:0xff2a2a}),x,.7,-2.12,g);add(B(.35,.14,.05),led,x,.7,2.12,g)})}
+[-4.2,4.2].forEach(bx=>{const g=new THREE.Group();g.position.set(bx,0,12.2);scene.add(g);const wd=M(0x8a5a2b),ir=M(0x222222);
+ const seat=add(B(1.7,.06,.5),wd,0,.45,0,g);seat.userData={t:'bench',x:bx,z:12.2};add(B(1.7,.4,.05),wd,0,.78,-.22,g).userData=seat.userData;
+ [-.75,.75].forEach(x=>{add(B(.06,.45,.45),ir,x,.225,0,g);add(B(.05,.05,.45),ir,x*1.08,.62,0,g)})});
+const benchBlk=(x,z)=>Math.abs(Math.abs(x)-4.2)<.95&&Math.abs(z-12.2)<.35;
+// pengunjung NPC (suasana toko hidup)
+const N=[],AD=[];const nd=(x,z)=>{N.push([x,z]);AD.push([]);return N.length-1},lk=(a,b)=>{AD[a].push(b);AD[b].push(a)};
+const zl=[7.6,3.2,-1.95,-6,-13],zc=[7.6,4.2,.9,-1.95,-5.5,-9.5,-13];
+const LL=zl.map(z=>nd(-2.5,z)),RL=zl.map(z=>nd(2.5,z)),LC=zc.map(z=>nd(-6.2,z)),RK=zc.map(z=>nd(6.2,z));
+[LL,RL,LC,RK].forEach(a=>{for(let i=1;i<a.length;i++)lk(a[i-1],a[i])});
+const NF=nd(0,7.6),ND1=nd(0,9.3),ND0=nd(0,12.5);
+[[LL[0],NF],[RL[0],NF],[NF,ND1],[ND1,ND0],[LL[0],LC[0]],[RL[0],RK[0]],[LL[2],LC[3]],[RL[2],RK[3]],[LL[2],RL[2]],[LL[4],LC[6]],[RL[4],RK[6]],[LL[4],RL[4]]].forEach(a=>lk(a[0],a[1]));
+function route(a,b){const prev={[a]:-1},q=[a];while(q.length){const c=q.shift();if(c===b)break;AD[c].forEach(n=>{if(!(n in prev)){prev[n]=c;q.push(n)}})}if(!(b in prev))return [a];const r=[];for(let c=b;c!==-1;c=prev[c])r.unshift(c);return r}
+const ST=[];const sp=(x,z,ry)=>{let b=0,bd=1e9;N.forEach((n,i)=>{const d=Math.hypot(n[0]-x,n[1]-z);if(d<bd){bd=d;b=i}});ST.push({x:x,z:z,ry:ry,n:b})};
+[6.5,3.2,-.1,-3.4,-6.7,-10].forEach(z=>{sp(-6.85,z,-P/2);sp(6.85,z,P/2)});
+[4.2,.9,-4.2,-7.5,-10.8].forEach(z=>{sp(-5.7,z,P/2);sp(-3.3,z,-P/2);sp(3.3,z,P/2);sp(5.7,z,-P/2)});
+sp(0,-2.6,P);sp(0,-6.9,P);sp(-3,-12.3,P);sp(0,-10.6,P);sp(-4.2,7.3,0);ST[ST.length-1].pay=1;
+const SK=[0xf1c7a1,0xe6b894,0xc68642,0x8d5524,0xffdbac],HR=[0x1a1210,0x3b2314,0x6b4423,0xa0522d,0x2b2b2b],DR=[0xc2185b,0x1976d2,0x388e3c,0xf57c00,0x7b1fa2,0x00838f,0xd84315,0x455a64,0xfbc02d];
+const pick1=a=>a[Math.random()*a.length|0];
+function shopper(){
+ const g=new THREE.Group();scene.add(g);const male=Math.random()<.45,sk=M(pick1(SK),{roughness:.5}),cl=M(pick1(DR),{roughness:.6,side:2}),hr=M(pick1(HR),{roughness:.4}),dk=M(0x222222),pants=M(pick1([0x263238,0x37474f,0x4e342e,0x1a237e]),{roughness:.7});
+ const piv=(x,y)=>{const p=new THREE.Group();p.position.set(x,y,0);g.add(p);return p};
+ const m=(ge,ma,p,x,y,z,s)=>{const q=new THREE.Mesh(ge,ma);q.position.set(x,y,z);if(s)q.scale.set(s[0],s[1],s[2]);p.add(q)};
+ const hip=male?.85:.62;
+ const prof=male?[[.16,.85],[.17,1.0],[.18,1.25],[.15,1.4],[.06,1.47]]:[[.2,.62],[.19,.78],[.18,.95],[.125,1.1],[.15,1.27],[.14,1.4],[.06,1.47]];
+ m(new THREE.LatheGeometry(prof.map(p=>new THREE.Vector2(p[0],p[1])),16),cl,g,0,0,0,[1,1,.7]);
+ const ll=piv(-.075,hip),rl=piv(.075,hip),la=piv(-.19,1.38),ra=piv(.19,1.38);
+ [ll,rl].forEach(p=>{m(C(male?.055:.05,hip,male?.045:.034),male?pants:sk,p,0,-hip/2,0);m(B(.07,.05,.14),dk,p,0,-hip+.025,.03)});
+ [la,ra].forEach(p=>{m(C(.034,.5,.026),male?cl:sk,p,0,-.25,0);m(SP(.03),sk,p,0,-.52,0)});
+ m(C(.035,.1),sk,g,0,1.5,0);m(SP(.1),sk,g,0,1.62,0,[.9,1.12,.95]);m(SP(.108),hr,g,0,1.645,-.03,male?[.95,.95,1]:[.95,1.12,1]);if(!male)m(SP(.1),hr,g,0,1.45,-.075,[1,2.1,.6]);
+ return {g:g,ll:ll,rl:rl,la:la,ra:ra,male:male}}
+function spawnOut(n){n.side=Math.random()<.5?-1:1;n.x=n.side*(14+Math.random()*2);n.z=13.2;n.ry=-n.side*P/2;n.visits=3+(Math.random()*3|0);n.node=NF;n.target=null;n.path=[[0,13.2],N[ND0],N[ND1],N[NF]];n.pi=0;n.state='walk';n.speed=.8+Math.random()*.4;n.g.visible=true;n.g.position.set(n.x,0,n.z)}
+function pickTarget(n){
+ if(n.visits<=0){n.path=route(n.node,ND1).map(i=>N[i]).concat([N[ND0],[0,13.2],[n.side*14,13.2]]);n.pi=0;n.state='leave';n.target=null;return}
+ n.visits--;const s=Math.random()<.12?ST[ST.length-1]:ST[Math.random()*(ST.length-1)|0];
+ n.path=route(n.node,s.n).map(i=>N[i]).concat([[s.x,s.z]]);n.pi=0;n.state='walk';n.target=s;n.node=s.n}
+function arrive(n){if(n.state==='leave'){n.g.visible=false;n.state='wait';n.t=5+Math.random()*15;return}
+ if(!n.target){pickTarget(n);return}
+ n.state=n.target.pay?'pay':'browse';n.t=n.target.pay?4:3+Math.random()*5}
+function stepNpc(n,dt){
+ if(n.state==='wait'){n.t-=dt;if(n.t<=0)spawnOut(n);return}
+ if(n.state==='browse'||n.state==='pay'){n.t-=dt;let da=n.target.ry-n.ry;da=Math.atan2(Math.sin(da),Math.cos(da));n.ry+=da*Math.min(1,dt*5);n.g.rotation.y=n.ry;[n.ll,n.rl,n.la].forEach(o=>o.rotation.x*=.85);n.ra.rotation.x+=((n.state==='browse'?-1.2:-.5)-n.ra.rotation.x)*Math.min(1,dt*4);if(n.t<=0)pickTarget(n);return}
+ const p=n.path[n.pi];if(!p){arrive(n);return}
+ const dx=p[0]-n.x,dz=p[1]-n.z,d=Math.hypot(dx,dz);
+ if(d<.08){n.pi++;if(n.pi>=n.path.length)arrive(n);return}
+ const st=Math.min(d,n.speed*dt);n.x+=dx/d*st;n.z+=dz/d*st;
+ let da=Math.atan2(dx,dz)-n.ry;da=Math.atan2(Math.sin(da),Math.cos(da));n.ry+=da*Math.min(1,dt*8);
+ n.ph+=st*5.5;const s=Math.sin(n.ph)*.6;n.ll.rotation.x=s;n.rl.rotation.x=-s;n.la.rotation.x=-s*.8;n.ra.rotation.x=s*.8;
+ n.g.position.set(n.x,0,n.z);n.g.rotation.y=n.ry}
+const npcs=[];
+for(let i=0;i<14;i++){const n=Object.assign(shopper(),{x:0,z:0,ry:0,path:[],pi:0,state:'wait',t:Math.random()*25,speed:1,node:NF,ph:0,visits:3,side:1,target:null});npcs.push(n);
+ if(i<7){const s=ST[Math.random()*(ST.length-1)|0];n.x=s.x;n.z=s.z;n.ry=s.ry;n.node=s.n;n.target=s;n.state='browse';n.t=Math.random()*6;n.visits=2+(Math.random()*3|0);n.g.position.set(n.x,0,n.z);n.g.rotation.y=n.ry}else n.g.visible=false}
+let seated=false;
+const lc=document.createElement('canvas');lc.width=1024;lc.height=640;const lx=lc.getContext('2d'),ltex2=new THREE.CanvasTexture(lc);
+const short=(s,n)=>s.length>n?s.slice(0,n-1)+'\u2026':s;
+add(B(3.1,2.0,.08),M(0x111111),0,2.8,-13.93);add(B(3.24,2.14,.05),gold,0,2.8,-13.96);
+add(new THREE.PlaneGeometry(3,1.875),new THREE.MeshBasicMaterial({map:ltex2}),0,2.8,-13.88).userData={t:'lb'};
+const payTex=(()=>{const c=document.createElement('canvas');c.width=512;c.height=320;const q=c.getContext('2d');q.fillStyle='#0f2a2a';q.fillRect(0,0,512,320);q.strokeStyle='#7fe0c8';q.lineWidth=8;q.strokeRect(10,10,492,300);q.fillStyle='#7fe0c8';q.textAlign='center';q.font='bold 120px system-ui';q.fillText('BAYAR',256,150);q.font='bold 36px system-ui';q.fillText('Klik di sini ▶',256,215);q.font='26px system-ui';q.fillStyle='#fff';q.fillText('QRIS · DANA · Transfer Bank',256,270);return new THREE.CanvasTexture(c)})();
+const payMat=new THREE.MeshBasicMaterial({map:payTex});
+add(B(.8,.55,.05),M(0x111111),-4.2,1.45,8.45).userData={t:'kasir'};
+{const ps=add(new THREE.PlaneGeometry(.72,.45),payMat,-4.2,1.45,8.42);ps.rotation.y=P;ps.userData={t:'kasir'}}
+add(C(.04,.3),M(0x222222),-4.2,1.15,8.45);add(C(.18,.03),M(0x222222),-4.2,1.01,8.45);
+const blk=(x,z)=>(z<9.9?(Math.abs(x)>7||z<-12.8):z<10.4?Math.abs(x)>1.1:(Math.abs(x)>16||z>26))||benchBlk(x,z)||(x>-11.3&&x<-6.7&&z>16.7&&z<18.9)||(z>-1.3&&z<5.9&&Math.abs(x)>3.7&&Math.abs(x)<5.5)||(z>-12.6&&z<-2.6&&Math.abs(x)>3.7&&Math.abs(x)<5.5)||Math.hypot(x,z+4.5)<1.1||(x>-6.3&&x<-2.1&&z>7.7&&z<9.9)||Math.hypot(x,z+8)<.7||Math.hypot(x,z+12.4)<.5;
+// orang
+function person(x,z,ry,o){
+ const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=ry;scene.add(g);
+ const sk=M(0xe6b894,{roughness:.5}),dr=M(o.d,{roughness:.5,side:2}),hr=M(o.h,{roughness:.4}),dk=M(0x2a1f22);
+ const m=(ge,ma,px,py,pz,s,rz)=>{const q=new THREE.Mesh(ge,ma);q.position.set(px,py,pz);if(s)q.scale.set(s[0],s[1],s[2]);if(rz)q.rotation.z=rz;q.userData={t:o.t};g.add(q)};
+ m(new THREE.LatheGeometry([[.2,.62],[.19,.78],[.18,.95],[.125,1.1],[.15,1.27],[.14,1.4],[.06,1.47]].map(p=>new THREE.Vector2(p[0],p[1])),20),dr,0,0,0,[1,1,.7]);
+ [-1,1].forEach(s=>{m(C(.05,.62,.034),sk,s*.075,.31,0);m(B(.07,.05,.14),dk,s*.075,.025,.03);m(C(.034,.5,.026),sk,s*.19,1.15,0,null,-s*.1);m(SP(.03),sk,s*.215,.9,0);m(SP(.011),dk,s*.035,1.64,.088)});
+ m(C(.035,.1),sk,0,1.5,0);m(SP(.1),sk,0,1.62,0,[.9,1.12,.95]);m(SP(.108),hr,0,1.645,-.03,[.95,1.12,1]);m(SP(.1),hr,0,1.45,-.075,[1,2.1,.6]);
+ m(SP(.014),M(0xb5213a),0,1.585,.09,[1.6,.6,.6]);m(B(.06,.02,.005),gold,.07,1.28,.115);return g}
+person(-4.2,9.2,P,{d:0x7b2d3f,h:0x1a1210,t:'kasir'});
+person(0,-12.4,0,{d:0xf2b9ae,h:0x5a3321,t:'ba'});
+// kasir
+[[3.6,.95,.7,.475],[3.7,.05,.8,.975]].forEach((a,i)=>add(B(a[0],a[1],a[2]),M(i?0xf5e6c8:0x5a3a2a),-4.2,a[3],8.4).userData={t:'kasir'});
+add(B(3.6,.06,.02),gold,-4.2,.8,8.04);
+add(B(.3,.04,.3),M(0x222222),-3.3,1.02,8.4).userData={t:'kasir'};add(B(.28,.2,.04),M(0x111111),-3.3,1.15,8.5).userData={t:'kasir'};add(B(.24,.15,.01),new THREE.MeshBasicMaterial({color:0x7fe0c8}),-3.3,1.15,8.47);
+[[-5.4,0xf48fb1],[-5.1,0x81d4fa],[-4.8,0xffd54f]].forEach(a=>{add(C(.025,.08),M(a[1]),a[0],1.04,8.2).userData={t:'kasir'};add(C(.014,.02),gold,a[0],1.1,8.2)});
+{const g=new THREE.Group();g.position.set(-4.2,0,8.4);g.rotation.y=P;scene.add(g);sign('KASIR',g,2.6)}
+// keranjang
+add(C(.03,.8),gold,1.6,.4,6.8);add(C(.4,.04),gold,1.6,.8,6.8);add(C(.25,.03),gold,1.6,.015,6.8);
+const bk=new THREE.Group();bk.position.set(1.6,.82,6.8);scene.add(bk);
+const wick=M(0xb98650,{roughness:.9,side:2}),wd=M(0x8a5a2b);
+[[new THREE.CylinderGeometry(.24,.17,.2,24,1,true),wick,.1,0],[C(.17,.02),wick,.01,0],[new THREE.TorusGeometry(.24,.014,8,28),wd,.2,P/2],[new THREE.TorusGeometry(.195,.008,6,24),wd,.07,P/2],[new THREE.TorusGeometry(.219,.008,6,24),wd,.14,P/2],[new THREE.TorusGeometry(.2,.013,8,24,P),wd,.2,0]].forEach(p=>{const m=new THREE.Mesh(p[0],p[1]);m.position.y=p[2];m.rotation.x=p[3];m.userData={t:'basket'};bk.add(m)});
+// cermin & layar scan (dinding belakang)
+add(B(2.6,2.4,.1),M(0xe8a598),-3,1.6,-13.9);
+add(new THREE.PlaneGeometry(2.2,2),M(0xdfeaf2,{metalness:.9,roughness:.05}),-3,1.6,-13.83).userData={t:'mirror'};
+for(let i=0;i<6;i++)[-4.45,-1.55].forEach(x=>add(SP(.08),led,x,.6+i*.38,-13.8));
+add(B(1.4,2.2,.1),M(0x37474f),3,1.5,-13.9);
+add(new THREE.PlaneGeometry(1.2,2),new THREE.MeshBasicMaterial({color:0x4dd0e1}),3,1.5,-13.83).userData={t:'scan'};
+// meja tester
+add(C(.45,.04),gold,0,.85,-8);add(C(.05,.85),gold,0,.425,-8);add(C(.28,.03),gold,0,.015,-8);
+[[0xc2185b,-.2,-.1],[0xe6b894,0,.15],[0x9ecbe8,.2,-.05]].forEach(a=>add(C(.035,.1),M(a[0]),a[1],.92,-8+a[2]).userData={t:'tester'});
+add(C(.01,.4),gold,0,1.05,-8.25);{const tm=add(C(.2,.02),M(0xdfeaf2,{metalness:.9,roughness:.05}),0,1.3,-8.25);tm.rotation.x=P/2;tm.userData={t:'tester'}}
+// kontrol
+let yaw=0,pitch=0,drag=null,moved=0;const keys={};
+addEventListener('keydown',e=>keys[e.key.toLowerCase()]=1);addEventListener('keyup',e=>keys[e.key.toLowerCase()]=0);
+document.querySelectorAll('#dp button').forEach(b=>{const k=b.dataset.k;b.addEventListener('pointerdown',e=>{e.stopPropagation();keys[k]=1});['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>keys[k]=0))});
+const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};moved=0});
+addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;moved+=Math.abs(dx)+Math.abs(dy);yaw-=dx*.005;pitch=Math.max(-1,Math.min(1,pitch-dy*.005));drag={x:e.clientX,y:e.clientY}});
+addEventListener('pointerup',e=>{if(drag&&moved<6&&e.target===cv)pick(e);drag=null});
+const ray=new THREE.Raycaster();
+function pick(e){
+  ray.setFromCamera({x:e.clientX/innerWidth*2-1,y:-(e.clientY/innerHeight)*2+1},cam);
+  const h=ray.intersectObjects(scene.children,true).find(i=>i.object.userData.t&&i.distance<7);
+  if(!h)return;const d=h.object.userData;
+  if(d.t==='basket'){basket=true;bk.visible=false;say('Keranjang di tangan! Klik produk di rak untuk mengambilnya 🛍️')}
+  else if(d.t==='item'){
+    if(!basket)return say('Ambil keranjang dulu di meja dekat pintu 🧺');
+    cart.push(d);d.root.visible=false;upd();say(d.n+' masuk keranjang')}
+  else if(d.t==='mirror')openCam('mirror');
+  else if(d.t==='scan')openCam('scan');
+  else if(d.t==='kasir')openPay();
+  else if(d.t==='slot')openSlot(d);
+  else if(d.t==='lb')openLB();
+  else if(d.t==='bench'){seated=true;intro=0;cam.position.set(d.x,1.15,d.z);yaw=Math.PI;pitch=-.05;say('Duduk santai menikmati jalanan 🌆 · tekan W/A/S/D untuk berdiri')}
+  else if(d.t==='ba'){say('Halo, saya Beauty Advisor. Yuk cek undertone kulitmu untuk shade matching ✨');openCam('scan')}
+  else if(d.t==='tester')say('Tester: coba warna dan aroma dulu sebelum membeli ✨');
+}
+const upd=()=>document.getElementById('bc').textContent='Keranjang ('+cart.length+')';
+function resize(){renderer.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+scene.updateMatrixWorld(true);scene.traverse(o=>{o.matrixAutoUpdate=false});tw.matrixAutoUpdate=true;npcs.forEach(n=>{[n.g,n.ll,n.rl,n.la,n.ra].forEach(o=>{o.matrixAutoUpdate=true})});
+const clock=new THREE.Clock();
+(function loop(){requestAnimationFrame(loop);const dt=Math.min(clock.getDelta(),.1),s=3.2*dt,px=cam.position.x,pz=cam.position.z;
+  const f=(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0),r=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0);
+  cam.position.x=px+(-Math.sin(yaw)*f+Math.cos(yaw)*r)*s;
+  cam.position.z=pz+(-Math.cos(yaw)*f-Math.sin(yaw)*r)*s;
+  if(seated){if(f||r){seated=false;cam.position.y=1.6;cam.position.x=px;cam.position.z=pz+.7}else{cam.position.x=px;cam.position.z=pz}}
+  if(blk(cam.position.x,cam.position.z)){if(!blk(px,cam.position.z))cam.position.x=px;else if(!blk(cam.position.x,pz))cam.position.z=pz;else{cam.position.x=px;cam.position.z=pz}}
+  if(intro>0&&(f||r))intro=0;if(intro>0){intro-=dt;const t=1-Math.max(intro,0)/5;cam.position.set(0,1.6,18-8.8*t*(2-t))}
+  const tt=performance.now()/1000;payMat.color.setScalar(.8+.2*Math.sin(tt*3));tw.rotation.y+=dt*.25;npcs.forEach(n=>stepNpc(n,dt));remoteStep(dt);
+  cam.rotation.set(pitch,yaw,0,'YXZ');renderer.render(scene,cam)})();
+// modal
+const modal=document.getElementById('modal'),box=document.getElementById('box');let stream=null;
+function close(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;modal.style.display='none'}
+modal.addEventListener('click',e=>{if(e.target===modal)close()});
+async function openCam(mode){
+  modal.style.display='flex';
+  box.innerHTML='<h3>'+(mode==='mirror'?'Mirror Photo':'AI Face Analysis')+'</h3><video id="v" autoplay playsinline muted></video><canvas id="snap"></canvas><p id="res"></p><button id="go">'+(mode==='mirror'?'Capture':'Mulai Scan')+'</button> <button id="x">Tutup</button>';
+  document.getElementById('x').onclick=close;
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}});document.getElementById('v').srcObject=stream}
+  catch(e){document.getElementById('res').textContent='Kamera tidak bisa diakses. Izinkan akses kamera di browser (di dalam pratinjau mungkin diblokir).';return}
+  document.getElementById('go').onclick=()=>{
+    const v=document.getElementById('v'),c=document.getElementById('snap'),w=v.videoWidth||640,h=v.videoHeight||480;
+    c.width=w;c.height=h;const x=c.getContext('2d');x.drawImage(v,0,0,w,h);
+    if(mode==='mirror'){c.style.display='block';v.style.display='none';
+      const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download='mirror-photo.png';a.click();
+      document.getElementById('res').textContent='Foto tersimpan 📸';return}
+    const d=x.getImageData(w*.4,h*.35,w*.2,h*.25).data;let r=0,g=0,b=0,n=d.length/4;
+    for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2]}r/=n;g/=n;b/=n;
+    const ratio=r/Math.max(b,1),br=(r+g+b)/3/255;
+    const tone=ratio>1.55?'Warm':ratio<1.3?'Cool':'Neutral',lvl=br>.62?'Terang':br>.4?'Sedang':'Gelap';
+    const rec=tone==='Warm'?'Foundation & Blush On (rak makeup, dinding kanan)':tone==='Cool'?'Parfum & Serum (area Fragrance dan Skincare)':'Pelembap & Lipstik (rak mana saja)';
+    document.getElementById('res').innerHTML='Undertone: <b>'+tone+'</b> · Kecerahan kulit: <b>'+lvl+'</b><br>Rekomendasi: '+rec+'<br><small>Perkiraan dari warna piksel pipi/dahi, bukan diagnosis kulit.</small>'}
+}
+const $=i=>document.getElementById(i),LS='glow-slots';let saved={};
+try{saved=JSON.parse(localStorage.getItem(LS)||'{}')}catch(e){}
+const save=()=>{try{localStorage.setItem(LS,JSON.stringify(saved))}catch(e){}};
+function updH(){drawHof();drawLB();$('bh').textContent='Slot Brand ('+Object.keys(saved).length+'/'+Object.keys(slots).length+')'}
+function el(tag,txt,p){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(p)p.appendChild(e);return e}
+function applyClaim(d,v){d.v=v;d.body.material=M(parseInt(String(v.color).slice(1),16)||0xf48fb1);
+ const c=document.createElement('canvas');c.width=c.height=256;const q=c.getContext('2d');q.fillStyle='#fff';q.fillRect(0,0,256,256);q.fillStyle='#4a2c2a';q.textAlign='center';q.textBaseline='middle';let f=44;q.font='bold 44px system-ui';while(q.measureText(v.brand).width>230&&f>14){f-=2;q.font='bold '+f+'px system-ui'}q.fillText(v.brand,128,100);q.font='22px system-ui';q.fillStyle='#8a4b43';q.fillText(String(v.prod).slice(0,22),128,160);
+ d.lb.material=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c)})}
+const RESERVE=600000;const PAY={dana:'081220309921',bank:'(isi nama bank Anda)',rek:'1080024194202',an:'(isi nama pemilik rekening)'};
+const rp=n=>'Rp'+n.toLocaleString('id-ID');
+function resetSlot(d){if(sb&&d.pending)releaseRemote(d);d.v=undefined;d.pending=false;d.body.material=wm;d.lb.material=lmat}
+function openSlot(d){
+ modal.style.display='flex';box.textContent='';
+ if(d.v){el('h3',d.v.brand,box);el('p','Pemilik: '+(d.v.owner||'-'),box);if(d.v.tag)el('p','\u201c'+d.v.tag+'\u201d',box);
+  if(d.v.link){const p=el('p','',box);if(/^https?:\/\//i.test(d.v.link)){const a=el('a',d.v.link,p);a.href=d.v.link;a.target='_blank';a.rel='noopener noreferrer'}else p.textContent=d.v.link}
+  if(d.pending)el('button','Hapus dari keranjang',box).onclick=()=>{const i=cart.findIndex(c=>c.id===d.id);if(i>-1)cart.splice(i,1);resetSlot(d);upd();close()};
+  el('button','Tutup',box).onclick=close;return}
+ if(!basket){close();return say('Ambil keranjang dulu di meja dekat pintu 🧺')}
+ box.innerHTML='<h3>Buat produk brand-mu</h3><p><small>Harga '+rp(d.price||1.000)+' per produk'+(d.price?' · etalase Best Seller':'')+'</small></p><div id="pv" style="width:110px;height:130px;margin:6px auto;border-radius:16px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;text-shadow:0 1px 3px #000;background:#f48fb1;padding:6px;box-sizing:border-box">Nama brand</div><p><input id="fo" maxlength="30" placeholder="Nama kamu"></p><p><input id="fb" maxlength="20" placeholder="Nama brand"></p><p><input id="ft" maxlength="40" placeholder="Tagline (opsional)"></p><p><input id="fl" maxlength="80" placeholder="Link sosmed/web (opsional)"></p><p><small>Nominal bayar (Rp) · makin tinggi, makin atas di Leaderboard</small><br><input id="fa" type="number" min="1" step="1"></p><p>Warna produk <input id="fc" type="color" value="#f48fb1" style="width:60px"></p><p id="fe"></p><p><button id="ok">Masukkan ke keranjang ('+rp(d.price||1)+')</button> <button id="x">Batal</button></p>';
+ const pv=()=>{$('pv').style.background=$('fc').value;$('pv').textContent=$('fb').value||'Nama brand'};
+ $('fa').value=d.price||1;if(user)$('fo').value=user.name;$('fc').oninput=pv;$('fb').oninput=pv;$('x').onclick=close;
+ $('ok').onclick=async()=>{const v={owner:$('fo').value.trim(),brand:$('fb').value.trim(),tag:$('ft').value.trim(),link:$('fl').value.trim(),color:$('fc').value};
+  if(v.owner.length<2||v.brand.length<2)return $('fe').textContent='Nama kamu dan nama brand minimal 2 karakter';
+  v.prod=v.tag||('by '+v.owner);if(user)v.uid=user.id;v.amount=Math.max(d.price||1,Math.floor(Number($('fa').value))||0);if(sb){const ok2=await reserveRemote(d,v);if(!ok2){say('Slot ini baru saja diambil orang lain. Pilih slot kosong lainnya.');syncRows();close();return}}cart.push({id:d.id,v:v,pr:v.amount,exp:Date.now()+RESERVE});d.pending=true;applyClaim(d,v);upd();close();say(v.brand+' masuk keranjang. Bayar di kasir ✨')}}
+function lbData(){const m={};Object.keys(saved).forEach(k=>{const v=saved[k];if(!v||!v.brand)return;const key=v.brand.toLowerCase(),a=Number(v.amount)||(Number(k)>=90000?5000:1),t=v.t||0;const e=m[key]||(m[key]={brand:v.brand,owner:v.owner||'',amt:0,t:t||Infinity,n:0});e.amt+=a;e.n++;if(t&&t<e.t)e.t=t});return Object.values(m).sort((a,b)=>b.amt-a.amt||a.t-b.t)}
+function drawLB(){const d=lbData();lx.fillStyle='#14090d';lx.fillRect(0,0,1024,640);lx.strokeStyle='#d4af37';lx.lineWidth=8;lx.strokeRect(8,8,1008,624);lx.textAlign='center';lx.fillStyle='#f6d98a';lx.font='bold 62px Georgia,serif';lx.fillText('LEADERBOARD',512,80);lx.fillStyle='#ffffff';lx.font='24px system-ui';lx.fillText('Brand dengan pembayaran tertinggi ada di paling atas',512,120);
+ if(!d.length){lx.font='bold 40px system-ui';lx.fillStyle='#f6d98a';lx.fillText('Belum ada brand',512,300);lx.font='28px system-ui';lx.fillStyle='#fff';lx.fillText('Jadilah yang pertama! Klaim produkmu mulai Rp1.000',512,360)}
+ d.slice(0,5).forEach((e,i)=>{const y=190+i*84;lx.fillStyle=i==0?'#3a2a10':'#241419';lx.fillRect(40,y-44,944,72);lx.textAlign='left';lx.fillStyle=['#ffd700','#c0c0c0','#cd7f32'][i]||'#aaa';lx.font='bold 46px system-ui';lx.fillText('#'+(i+1),60,y+6);lx.fillStyle='#fff';lx.font='bold '+(i==0?44:38)+'px system-ui';lx.fillText(short(e.brand,18),170,y+4);lx.fillStyle='#bbb';lx.font='22px system-ui';lx.fillText(short(e.owner?'oleh '+e.owner:'',26),170,y+30);lx.textAlign='right';lx.fillStyle='#f6d98a';lx.font='bold 40px system-ui';lx.fillText(rp(e.amt),960,y+6)});
+ lx.textAlign='center';lx.fillStyle='#8a7a6a';lx.font='20px system-ui';lx.fillText(d.length+' brand \u00b7 diperbarui otomatis',512,616);ltex2.needsUpdate=true}
+const SB={url:'',key:''};// isi dengan Project URL dan anon key dari Supabase (Project Settings > API)
+let sb=null,chan=null;var myId=Math.random().toString(36).slice(2,8);var remote={};
+const TOKEN=(()=>{try{let t=localStorage.getItem('glow-token');if(!t){t=(crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).slice(2)+Date.now());localStorage.setItem('glow-token',t)}return t}catch(e){return Math.random().toString(36).slice(2)+Date.now()}})();
+const ping=()=>{try{chan&&chan.send({type:'broadcast',event:'changed',payload:{}})}catch(e){}};
+async function reserveRemote(d,v){try{const r=await sb.rpc('reserve_slot',{p_id:d.id,p_brand:v.brand,p_owner:v.owner,p_tag:v.tag,p_link:v.link,p_color:v.color,p_amount:v.amount,p_token:TOKEN});if(!r.error&&r.data===true){ping();return true}}catch(e){}return false}
+function releaseRemote(d){try{sb.rpc('release_slot',{p_id:d.id,p_token:TOKEN}).then(ping)}catch(e){}}
+async function syncRows(){if(!sb)return;let res;try{res=await sb.from('slots_public').select('*')}catch(e){return}const data=res.data;if(res.error||!data)return;
+ const seen={};saved={};
+ data.forEach(r=>{const d=slots[r.id];if(!d)return;seen[r.id]=1;
+  if(r.status==='paid'){saved[r.id]={brand:r.brand,owner:r.owner,tag:r.tag,link:r.link,color:r.color,amount:r.amount,t:Date.parse(r.paid_at)||0,prod:r.tag||('by '+r.owner)};if(!d.paid||!d.v||d.v.brand!==r.brand)applyClaim(d,saved[r.id]);d.paid=true;d.remote='paid'}
+  else if(!d.pending){if(r.expired){if(d.remote){resetSlot(d);d.remote=null}}else{applyClaim(d,{brand:r.brand,owner:r.owner,tag:r.tag,link:r.link,color:r.color,prod:r.status==='verifying'?'menunggu verifikasi':'dipesan...'});d.remote=r.status}}});
+ Object.keys(slots).forEach(k=>{const d=slots[k];if(!seen[k]&&d.remote&&!d.pending){resetSlot(d);d.remote=null;d.paid=false}});
+ updH()}
+function onPos(p){if(!p||p.id===myId)return;let r=remote[p.id];if(!r){r=remote[p.id]=Object.assign(shopper(),{x:p.x,z:p.z,ry:p.ry,tx:p.x,tz:p.z,tr:p.ry,ph:0,seen:0})}r.tx=p.x;r.tz=p.z;r.tr=p.ry;r.seen=Date.now()}
+function remoteStep(dt){if(!remote)return;const now=Date.now();Object.keys(remote).forEach(k=>{const r=remote[k];if(now-r.seen>4000){scene.remove(r.g);delete remote[k];return}
+ const dx=r.tx-r.x,dz=r.tz-r.z,d=Math.hypot(dx,dz),st=Math.min(d,3.5*dt);
+ if(d>.01){r.x+=dx/d*st;r.z+=dz/d*st;r.ph+=st*5.5;const s=Math.sin(r.ph)*.6;r.ll.rotation.x=s;r.rl.rotation.x=-s;r.la.rotation.x=-s*.8;r.ra.rotation.x=s*.8}else{r.ll.rotation.x=r.rl.rotation.x=r.la.rotation.x=r.ra.rotation.x=0}
+ let da=r.tr-r.ry;da=Math.atan2(Math.sin(da),Math.cos(da));r.ry+=da*Math.min(1,dt*8);r.g.position.set(r.x,0,r.z);r.g.rotation.y=r.ry})}
+function initSB(){if(!SB.url||!SB.key||!window.supabase)return;try{sb=window.supabase.createClient(SB.url,SB.key);syncRows();setInterval(syncRows,8000);
+ chan=sb.channel('store-live');chan.on('broadcast',{event:'pos'},m=>onPos(m.payload)).on('broadcast',{event:'changed'},()=>syncRows()).subscribe();
+ setInterval(()=>{if(!chan||intro>0)return;try{chan.send({type:'broadcast',event:'pos',payload:{id:myId,x:+cam.position.x.toFixed(2),z:+cam.position.z.toFixed(2),ry:yaw+Math.PI}})}catch(e){}},250)}catch(e){console.warn(e)}}
+const STORE={ig:'',wa:''};// opsional: isi akun Instagram / nomor WhatsApp toko agar tampil di Informasi Toko
+let user=null;try{user=JSON.parse(localStorage.getItem('glow-user')||'null')}catch(e){}
+function navUpd(){$('n4').textContent=user?user.name.split(' ')[0]:'Login'}
+function logout(){user=null;try{localStorage.removeItem('glow-user')}catch(e){}navUpd();close();say('Kamu sudah keluar')}
+function openInfo(){modal.style.display='flex';box.textContent='';el('h3','Glow Beauty Store',box);
+ el('p','Toko kosmetik virtual 3D: jalan-jalan, lihat rak, dan klaim produk dengan nama brand-mu sendiri.',box);
+ const ul=el('div','',box);ul.style.textAlign='left';
+ [['Buka','24 jam (toko virtual)'],['Harga klaim','Rp1.000 per produk (Best Seller Rp5.000)'],['Pembayaran','QRIS, DANA, Transfer Bank'],['Slot terisi',Object.keys(saved).length+' dari '+Object.keys(slots).length]].concat(STORE.ig?[['Instagram',STORE.ig]]:[],STORE.wa?[['WhatsApp',STORE.wa]]:[]).forEach(a=>{const r=el('p','',ul);el('b',a[0]+': ',r);r.appendChild(document.createTextNode(a[1]))});
+ el('p','Cara klaim: ambil keranjang, klik botol putih KOSONG, isi nama brand dan pilih warna, lalu bayar di kasir.',box).style.fontSize='13px';
+ el('button','Tutup',box).onclick=close}
+function openLogin(){modal.style.display='flex';box.textContent='';
+ if(user){openProfile();return}
+ box.innerHTML='<h3>Masuk</h3><p><small>Versi demo: tanpa password, data hanya tersimpan di browser ini. Login sungguhan (Google/email) menyusul.</small></p><p><input id="ln" maxlength="30" placeholder="Nama kamu"></p><p><input id="le" type="email" maxlength="60" placeholder="Email"></p><p id="lerr"></p><p><button id="lok">Masuk</button> <button id="x">Batal</button></p>';
+ $('x').onclick=close;
+ $('lok').onclick=()=>{const n=$('ln').value.trim(),e=$('le').value.trim();if(n.length<2)return $('lerr').textContent='Nama minimal 2 karakter';if(!/^\S+@\S+\.\S+$/.test(e))return $('lerr').textContent='Email tidak valid';
+  user={id:'u'+[...e.toLowerCase()].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,7).toString(36),name:n,email:e};try{localStorage.setItem('glow-user',JSON.stringify(user))}catch(x){}navUpd();close();say('Halo, '+n+'! Selamat berbelanja ✨')}}
+function openProfile(){modal.style.display='flex';box.textContent='';
+ if(!user){openLogin();return}
+ const av=el('div',user.name[0].toUpperCase(),box);av.style.cssText='width:64px;height:64px;border-radius:50%;background:var(--ac);color:#fff;font:bold 30px Georgia,serif;display:flex;align-items:center;justify-content:center;margin:0 auto 8px';
+ el('h3',user.name,box);el('p',user.email,box).style.fontSize='13px';
+ const lb=lbData(),mine=Object.keys(saved).map(k=>saved[k]).filter(v=>v&&(v.uid===user.id||(!v.uid&&String(v.owner).toLowerCase()===user.name.toLowerCase())));
+ const tot=mine.reduce((a,v)=>a+(Number(v.amount)||1),0);
+ el('p','Brand: '+mine.length+' \u00b7 Total dibayar: '+rp(tot)+' \u00b7 Di keranjang: '+cart.length,box);
+ if(!mine.length)el('p','Belum ada brand. Klik botol putih KOSONG di rak untuk klaim.',box);
+ mine.forEach(v=>{const i=lb.findIndex(e=>e.brand.toLowerCase()===v.brand.toLowerCase());el('div',v.brand+' \u2014 '+rp(Number(v.amount)||1)+(i>=0?' \u00b7 peringkat #'+(i+1):''),box)});
+ el('button','Keluar',box).onclick=logout;el('button','Tutup',box).onclick=close}
+function openDrawer(){const dp=$('dpanel');dp.textContent='';el('h3','Glow Store',dp);
+ [['\u2139\ufe0f Informasi Toko',openInfo],['\ud83c\udfc6 Leaderboard',openLB],['\ud83d\udc64 My Profile',openProfile],[user?'\ud83d\udeaa Keluar':'\ud83d\udd11 Login',user?logout:openLogin],['\ud83d\udcf8 Mirror Photo',()=>openCam('mirror')],['\u2728 AI Face Analysis',()=>openCam('scan')],['\ud83e\uddfa Keranjang',openCart]].forEach(a=>{el('button',a[0],dp).onclick=()=>{$('drawer').style.display='none';a[1]()}});
+ $('drawer').style.display='block'}
+function openLB(){modal.style.display='flex';box.textContent='';el('h3','Leaderboard',box);const d=lbData();if(!d.length)el('p','Belum ada brand. Jadilah yang pertama!',box);d.slice(0,20).forEach((e,i)=>el('div','#'+(i+1)+'  '+e.brand+(e.owner?' ('+e.owner+')':'')+' \u2014 '+rp(e.amt),box));el('button','Tutup',box).onclick=close}
+function openCart(){modal.style.display='flex';box.textContent='';el('h3','Keranjang',box);
+ if(!cart.length)el('p','Masih kosong. Klik botol putih KOSONG di rak untuk membuat produkmu.',box);
+ cart.forEach(c=>el('div',c.v.brand+' \u2014 '+rp(c.pr),box));
+ if(cart.length){el('p','Total '+rp(cart.reduce((a,b)=>a+b.pr,0)),box).style.fontWeight='bold';el('button','Bayar sekarang',box).onclick=openPay}
+ el('button','Tutup',box).onclick=close}
+function openPay(){
+ modal.style.display='flex';box.textContent='';el('h3','Kasir',box);
+ if(!cart.length){el('p','Keranjang kosong. Klik botol putih KOSONG di rak untuk membuat produkmu.',box);el('button','Tutup',box).onclick=close;return}
+ const t=cart.reduce((a,b)=>a+b.pr,0),no='GLW-'+(Math.random()*90000+10000|0);
+ cart.forEach(c=>el('div',c.v.brand+' \u2014 '+rp(c.pr),box));
+ el('p','Total '+rp(t),box).style.fontWeight='bold';el('p','Pilih metode pembayaran:',box);
+ const pm=el('div','',box),info=el('div','',box),ref=el('input','',box),tm=el('p','',box),ok=el('button','Saya sudah bayar',box);tm.id='cd';ref.placeholder='4 digit terakhir nomor pengirim / no. referensi';ref.maxLength=20;ok.disabled=true;let sel=null;const chk=()=>{ok.disabled=!(sel&&ref.value.trim().length>=4)};ref.oninput=chk;
+ el('button','Batal',box).onclick=close;
+ const show=m=>{info.textContent='';const ap=h=>{el('p','',info).innerHTML=h};
+  if(m==='QRIS'){ap('Scan QRIS dengan nominal <b>'+rp(t)+'</b>');const im=document.createElement('img');im.src='qris.png';im.style.cssText='max-width:220px;width:100%';im.onerror=()=>im.replaceWith(document.createTextNode('(Letakkan gambar QRIS Anda bernama qris.png di folder yang sama.)'));info.appendChild(im);ap('Atau kirim lewat DANA ke <b>'+PAY.dana+'</b>')}
+  else if(m==='DANA')ap('Kirim <b>'+rp(t)+'</b> lewat DANA ke <b>'+PAY.dana+'</b>');
+  else if(m==='Transfer Bank')ap('Transfer <b>'+rp(t)+'</b> ke '+PAY.bank+'<br>No. rekening <b>'+PAY.rek+'</b><br>a.n. '+PAY.an);
+  else ap('Hubungi admin untuk metode lain (OVO, GoPay, dll).');
+  ap('<small>Tulis nomor pesanan <b>'+no+'</b> di catatan pembayaran.</small>')};
+ ['QRIS','DANA','Transfer Bank','Lainnya'].forEach(m=>{const b=el('button',m,pm);b.style.margin='3px';b.onclick=()=>{sel=m;chk();[...pm.children].forEach(c=>c.style.background=c===b?'var(--ac)':'');show(m)}});
+ ok.onclick=async()=>{if(sb){ok.disabled=true;for(const c of cart){try{await sb.rpc('submit_payment',{p_id:c.id,p_token:TOKEN,p_ref:ref.value.trim()})}catch(e){}slots[c.id].pending=false}const n2=cart.length;cart.length=0;upd();ping();box.textContent='';el('h3','Pesanan diterima \u23f3',box);el('p','No. pesanan '+no+' \u00b7 '+n2+' produk \u00b7 '+rp(t)+' \u00b7 '+sel,box);el('p','Admin akan memverifikasi pembayaranmu. Setelah terverifikasi, brand-mu menetap di rak dan masuk Leaderboard.',box).style.fontSize='13px';el('button','Selesai',box).onclick=close;syncRows();return}cart.forEach(c=>{const d=slots[c.id];d.pending=false;d.paid=true;c.v.ref=ref.value.trim();c.v.t=Date.now();saved[c.id]=c.v});save();const n=cart.length;cart.length=0;upd();updH();box.textContent='';el('h3','Pesanan diterima ✅',box);el('p','No. pesanan '+no+' \u00b7 '+n+' produk \u00b7 '+rp(t)+' \u00b7 '+sel,box);el('p','Demo: produk langsung tampil di rak. Versi sungguhan: tampil setelah pembayaran diverifikasi.',box).style.fontSize='12px';el('button','Selesai',box).onclick=close}}
+function openSlotOld(d){
+ modal.style.display='flex';box.textContent='';
+ if(d.v){el('h3',d.v.brand,box);el('p','Produk: '+d.v.prod,box);if(d.v.tag)el('p','“'+d.v.tag+'”',box);
+  if(d.v.link){const p=el('p','',box);if(/^https?:\/\//i.test(d.v.link)){const a=el('a',d.v.link,p);a.href=d.v.link;a.target='_blank';a.rel='noopener noreferrer'}else p.textContent=d.v.link}
+  el('button','Tutup',box).onclick=close;return}
+ box.innerHTML='<h3>Klaim slot ini</h3><p><small>Harga rencana Rp1.000 · versi demo: gratis, belum ada pembayaran</small></p><p><input id="fb" maxlength="20" placeholder="Nama brand"></p><p><input id="fp" maxlength="24" placeholder="Nama produk"></p><p><input id="ft" maxlength="40" placeholder="Tagline (opsional)"></p><p><input id="fl" maxlength="80" placeholder="Link IG/web (opsional)"></p><p>Warna botol <input id="fc" type="color" value="#f48fb1" style="width:60px"></p><p id="fe"></p><p><button id="ok">Klaim slot</button> <button id="x">Batal</button></p>';
+ $('x').onclick=close;
+ $('ok').onclick=()=>{const v={brand:$('fb').value.trim(),prod:$('fp').value.trim()||'Produk Baru',tag:$('ft').value.trim(),link:$('fl').value.trim(),color:$('fc').value};if(v.brand.length<2)return $('fe').textContent='Nama brand minimal 2 karakter';saved[d.id]=v;save();applyClaim(d,v);updH();close();say(v.brand+' sekarang ada di rak! ✨')}}
+function openHall(){modal.style.display='flex';box.textContent='';el('h3','Hall of Brands',box);const ks=Object.keys(saved);if(!ks.length)el('p','Belum ada brand. Klik botol putih KOSONG di rak untuk klaim slot pertama!',box);ks.forEach(k=>el('div',saved[k].brand+' — '+saved[k].prod,box));
+ el('button','Reset demo',box).onclick=()=>{try{localStorage.removeItem(LS)}catch(e){}location.reload()};el('button','Tutup',box).onclick=close}
+function openPayOld(){
+ modal.style.display='flex';
+ if(!cart.length){box.innerHTML='<h3>Kasir</h3><p>Keranjang masih kosong. Ambil produk dari rak dulu 🛍️</p><button id="x">Tutup</button>';document.getElementById('x').onclick=close;return}
+ const t=cart.reduce((a,b)=>a+b.pr,0);let sel=null;
+ box.innerHTML='<h3>Kasir</h3>'+cart.map(c=>'<div>'+c.n+' — Rp'+c.pr+'rb</div>').join('')+'<p><b>Total Rp'+t+'rb</b></p><p>Metode bayar:</p><div id="pm"></div><p><button id="pay" disabled>Bayar</button> <button id="x">Batal</button></p>';
+ ['QRIS','Transfer Bank','Kartu Kredit','Tunai'].forEach(m=>{const b=document.createElement('button');b.textContent=m;b.style.margin='3px';b.onclick=()=>{sel=m;document.getElementById('pay').disabled=false;[...document.getElementById('pm').children].forEach(c=>c.style.background=c===b?'var(--ac)':'')};document.getElementById('pm').appendChild(b)});
+ document.getElementById('x').onclick=close;
+ document.getElementById('pay').onclick=()=>{const no='GLW-'+Math.floor(Math.random()*90000+10000);box.innerHTML='<h3>Pembayaran berhasil ✅</h3><p>No. pesanan <b>'+no+'</b><br>'+cart.length+' produk · Rp'+t+'rb · '+sel+'</p><p><small>Ini simulasi, belum ada pembayaran sungguhan.</small></p><button id="x">Selesai</button>';cart.length=0;upd();document.getElementById('x').onclick=close}
+}
+document.getElementById('bm').onclick=()=>openCam('mirror');
+document.getElementById('bs').onclick=()=>openCam('scan');
+$('bh').onclick=openHall;try{Object.keys(saved).forEach(k=>{if(slots[k]){applyClaim(slots[k],saved[k]);slots[k].paid=true}})}catch(e){}updH();
+document.getElementById('bc').onclick=()=>{modal.style.display='flex';
+  const t=cart.reduce((a,b)=>a+b.pr,0);
+  box.innerHTML='<h3>Keranjang</h3>'+(cart.length?cart.map(c=>'<div>'+c.n+' — Rp'+c.pr+'rb</div>').join('')+'<p><b>Total Rp'+t+'rb</b></p>':'<p>Masih kosong</p>')+'<button id="x">Tutup</button>';
+  document.getElementById('x').onclick=close};
+$('bc').onclick=openCart;$('bl').onclick=openLB;initSB();
+$('mb').onclick=openDrawer;$('dback').onclick=()=>{$('drawer').style.display='none'};$('n1').onclick=openInfo;$('n2').onclick=openLB;$('n3').onclick=openProfile;$('n4').onclick=openLogin;navUpd();setTimeout(()=>{$('welcome').style.opacity=0},7500);
+setInterval(()=>{const now=Date.now();for(let i=cart.length-1;i>=0;i--){const c=cart[i];if(now>c.exp){cart.splice(i,1);resetSlot(slots[c.id]);upd();say('Waktu pembayaran habis: slot '+c.v.brand+' dilepas dan bisa diambil orang lain');if($('cd'))close()}}const cd=$('cd');if(cd&&cart.length){const m=Math.max(0,Math.min(...cart.map(c=>c.exp))-now);cd.textContent='Selesaikan pembayaran dalam '+Math.floor(m/60000)+':'+String(Math.floor(m/1000)%60).padStart(2,'0')+' atau slot dilepas'}},1000);
+</script></body></html>
